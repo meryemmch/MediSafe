@@ -45,5 +45,5 @@ class Report(Base):
     iv= Column(String, nullable=False)
     doctor = relationship("User", foreign_keys=[doctor_id])
     patient = relationship("User", foreign_keys=[patient_id])
-
+    original_filename= Column(String, nullable=False)
 

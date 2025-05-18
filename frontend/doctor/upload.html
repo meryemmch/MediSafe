@@ -177,15 +177,20 @@ async function encryptAndUploadReport() {
         iterations: 100000
       });
         console.log("Derived AES Key (hex):", aesKey.toString(CryptoJS.enc.Hex));
-    
-      const iV = CryptoJS.lib.WordArray.random(16);
+      // DURING ENCRYPTION (on the client, before uploading)
 
+console.log("ENCRYPTION - Generated AES Key (hex):", aesKey.toString(CryptoJS.enc.Hex));
+
+
+      const iV = CryptoJS.lib.WordArray.random(4);
+console.log("ENCRYPTION - Generated IV (hex):", iV.toString(CryptoJS.enc.Hex));
       const encrypted = CryptoJS.AES.encrypt(wordArray, aesKey, {
         iv: iV,
         mode: CryptoJS.mode.CBC,
         padding: CryptoJS.pad.Pkcs7
       }).toString(); // Base64 string
       console.log('data',encrypted)
+
 
       const res = await fetch(`http://localhost:8000/users/public-key/${patientUsername}`);
       if (!res.ok) throw new Error("Failed to fetch patient's public key");

@@ -277,7 +277,7 @@ def get_patient_reports(patient_username: str, db: Session = Depends(get_db)):
             "encrypted_aes_key": report.encrypted_aes_key,
             "salt": report.salt,
             "base64_file": encoded_content,
-            "original_filename": report.encrypted_filename ,
+            "original_filename": report.original_filename ,
             "iv":report.iv
         })
 
@@ -297,8 +297,7 @@ class ReportUploadRequest(BaseModel):
     encrypted_report: str  # base64 or encrypted string
 
 @app.post("/upload_report")
-async def upload_report(data: ReportUploadRequest):
-    db: Session = SessionLocal()
+async def upload_report(data: ReportUploadRequest, db: Session = Depends(get_db)):
     try:
         doctor = db.query(User).filter(User.username == data.doctor_username, User.role == UserRole.doctor).first()
         patient = db.query(User).filter(User.username == data.patient_username, User.role == UserRole.patient).first()
@@ -306,11 +305,19 @@ async def upload_report(data: ReportUploadRequest):
         if not doctor or not patient:
             raise HTTPException(status_code=404, detail="Doctor or patient not found")
 
-        # Save encrypted report file
-        unique_filename = f"{uuid.uuid4()}_{data.filename}"
+        # Generate a unique filename for the encrypted report
+        unique_filename = f"{uuid.uuid4()}_{data.filename}.b64" # Add a .b64 extension to indicate Base64 content
         file_path = os.path.join(SECURE_STORAGE_DIR1, unique_filename)
-        with open(file_path, "w") as f:  # write encrypted string
-            f.write(data.encrypted_report)
+
+        # --- THE CORRECTED FIX FOR SAVING THE BASE64 STRING AS RAW BYTES ---
+        try:
+            # Open in binary write mode ('wb')
+            # Encode the Base64 string to bytes (UTF-8 is suitable for Base64 characters)
+            with open(file_path, "wb") as f:
+                f.write(data.encrypted_report.encode('utf-8'))
+        except IOError as e:
+            # Handle potential file writing errors
+            raise HTTPException(status_code=500, detail=f"Failed to save encrypted file to disk: {str(e)}")
 
         # Store metadata in DB
         new_report = Report(
@@ -318,13 +325,19 @@ async def upload_report(data: ReportUploadRequest):
             iv=data.iv,
             doctor_id=doctor.user_id,
             patient_id=patient.user_id,
-            encrypted_filename=unique_filename,
+            encrypted_filename=unique_filename, # Store the unique filename for retrieval
             encrypted_aes_key=data.encrypted_aes_key,
-            salt=data.salt
+            salt=data.salt,
+            original_filename=data.filename
         )
         db.add(new_report)
         db.commit()
+        db.refresh(new_report)
 
         return JSONResponse({"detail": "Report uploaded successfully", "report_id": new_report.report_id})
+    except Exception as e:
+        db.rollback() # Rollback in case of any database error
+        print(f"Error during report upload: {e}") # Log the error for debugging
+        raise HTTPException(status_code=500, detail=f"An error occurred during report upload: {str(e)}")
     finally:
         db.close()

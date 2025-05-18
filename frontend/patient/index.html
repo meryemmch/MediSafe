@@ -121,11 +121,13 @@ button:hover {
   <label for="patientUsername">Your Username:</label>
   <input type="text" id="patientUsername" placeholder="Enter your username" />
 
+  <label for="keyPassword">Private Key Password:</label>
+  <input type="password" id="keyPassword" placeholder="Enter your key password" />
+
   <label for="privateKeyFile">Upload Your Private Key (.key):</label>
   <input type="file" id="privateKeyFile" accept=".key" />
    
-  <label for="keyPassword">Private Key Password:</label>
-  <input type="password" id="keyPassword" placeholder="Enter your key password" />
+
 
   <label for="reportSelect">Select a Report:</label>
   <select id="reportSelect"></select>
@@ -134,25 +136,19 @@ button:hover {
 </section>
 
 <script>
-let reportsMetadata = [];
+let imagesMetadata = [];
 let privateKeyPEM = null;
 
-// Read and decrypt private key
-document.getElementById("privateKeyFile").addEventListener("change", function (event) {
-  console.log("Private key file selected");
+document.getElementById("privateKeyFile").addEventListener("change", function(event) {
   const file = event.target.files[0];
   const reader = new FileReader();
 
-  reader.onload = function (e) {
-    console.log("Private key file loaded");
+  reader.onload = function(e) {
     try {
       const raw = e.target.result;
-      console.log("Raw file content:", raw.slice(0, 100)); // Log first 100 chars for sanity check
       let keyData = JSON.parse(raw);
-      console.log("Parsed JSON from key file:", keyData);
 
       if (!keyData.encryptedPrivate || !keyData.salt) {
-        console.error("Missing encryptedPrivate or salt in key file");
         alert("Missing encryptedPrivate or salt.");
         return;
       }
@@ -163,38 +159,26 @@ document.getElementById("privateKeyFile").addEventListener("change", function (e
          return;
         }
 
-      console.log("Password entered:", password ? "YES" : "NO");
-      if (!password) {
-        console.log("Password not provided, aborting decryption");
-        return;
-      }
 
       const saltParsed = CryptoJS.enc.Hex.parse(keyData.salt);
-      console.log("Salt parsed:", saltParsed.toString());
       const aesKey = CryptoJS.PBKDF2(password, saltParsed, { keySize: 256 / 32 });
-      console.log("AES key derived:", aesKey.toString());
       const decrypted = CryptoJS.AES.decrypt(keyData.encryptedPrivate, aesKey.toString());
       const decryptedUtf8 = decrypted.toString(CryptoJS.enc.Utf8);
-      console.log("Decrypted private key PEM (start):", decryptedUtf8.slice(0, 50));
 
       if (!decryptedUtf8.includes("PRIVATE KEY")) {
-        console.error("Decrypted content does not contain 'PRIVATE KEY'");
-        alert("Wrong password or corrupted key.");
+        alert("Wrong password or corrupted file.");
         return;
       }
 
       privateKeyPEM = decryptedUtf8;
-      console.log("Private key decrypted and stored");
-
     } catch (err) {
-      console.error("Error processing private key file:", err);
-      alert("Failed to process private key file.");
+      alert("Failed to process key.");
+      console.error(err);
     }
   };
 
   reader.readAsText(file);
 });
-
 // Fetch reports for patient
   async function fetchPatientReports() {
     const patientUsername = document.getElementById("patientUsername").value.trim();
@@ -277,7 +261,8 @@ document.getElementById("decryptBtn").addEventListener("click", async () => {
     console.log("AES key length (bytes):", aesKeyWA.sigBytes);
     console.log("Encrypted base64 file content:", selectedReport.base64_file);
 
-   console.log('iv',selectedReport.iv=='')
+
+    console.log(selectedReport.base64_file)
     // Base64 decode encrypted file content
     const cipherParams = CryptoJS.lib.CipherParams.create({
       ciphertext: CryptoJS.enc.Base64.parse(selectedReport.base64_file)
@@ -288,9 +273,9 @@ document.getElementById("decryptBtn").addEventListener("click", async () => {
     console.log('selectedReport:', selectedReport);
     console.log('iv:', selectedReport?.iv);
 
+
+
     const ivWA = CryptoJS.enc.Hex.parse(selectedReport.iv);
-    
-    
     const decryptedWA = CryptoJS.AES.decrypt(cipherParams, aesKeyWA, {
       iv: ivWA,
       mode: CryptoJS.mode.CBC,
