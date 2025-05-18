@@ -1,0 +1,97 @@
+import hashlib
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError, jwt
+from sqlalchemy.orm import Session
+from datetime import datetime, timedelta
+import backend.models
+from backend.database import SessionLocal
+
+SECRET_KEY = "your-secret-key"  
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+# OAuth2 scheme for token bearer
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+
+# Dependency: get DB session
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+# Hash password using SHA256
+def get_password_hash(password: str) -> str:
+    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+
+
+# Verify password by hashing input and comparing
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    hashed_input = get_password_hash(plain_password)
+    return hashed_input == hashed_password
+
+
+# Authenticate user by username and password
+def authenticate_user(db: Session, username: str, password: str):
+    user = db.query(backend.models.User).filter(backend.models.User.username == username).first()
+    if not user:
+        return False
+    if not verify_password(password, user.hashed_password):
+        return False
+    return user
+
+
+# Create JWT access token
+def create_access_token(data: dict, expires_delta: timedelta = None):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+
+# Get current user from token
+async def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+
+    user = db.query(backend.models.User).filter(backend.models.User.username == username).first()
+    if user is None:
+        raise credentials_exception
+    return user
+
+
+# Shortcut dependency to get active user (could extend for is_active field)
+def get_current_active_user(
+    current_user: backend.models.User = Depends(get_current_user)
+):
+    return current_user
+
+
+# Role-based dependency generator
+def get_current_active_user_by_role(role: str):
+    def role_checker(
+        current_user: backend.models.User = Depends(get_current_user)
+    ):
+        if current_user.role != role:
+            raise HTTPException(status_code=403, detail="Operation not permitted")
+        return current_user
+    return role_checker
+

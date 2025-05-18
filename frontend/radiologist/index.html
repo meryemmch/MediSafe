@@ -1,0 +1,91 @@
+<form id="uploadForm">
+    <input type="file" id="image" name="image" required />
+    <input type="text" id="doctorUsername" name="doctorUsername" placeholder="Doctor Username" required />
+    <input type="text" id="patientUsername" name="patientUsername" placeholder="Patient Username" required />
+    <input type="password" id="password" name="password" placeholder="Encryption Password" required />
+    <button type="submit">Upload</button>
+</form>
+
+<!-- ✅ Include external libraries first -->
+<script src="https://cdn.jsdelivr.net/npm/jsencrypt/bin/jsencrypt.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+
+<!-- ✅ Then add your custom JS in a separate script block -->
+<script>
+document.getElementById('uploadForm').addEventListener('submit', async function (e) {
+    e.preventDefault();
+
+    const fileInput = document.getElementById('image');
+    const doctorUsername = document.getElementById('doctorUsername').value;
+    const patientUsername = document.getElementById('patientUsername').value;
+    const password = document.getElementById('password').value;
+
+    if (fileInput.files.length === 0) {
+        alert('Please select an image file.');
+        return;
+    }
+
+    const file = fileInput.files[0];
+    const reader = new FileReader();
+
+    reader.onload = async function () {
+        try {
+            const wordArray = CryptoJS.lib.WordArray.create(reader.result);
+            const salt = CryptoJS.lib.WordArray.random(128 / 8);
+            const aesKey = CryptoJS.PBKDF2(password, salt, {
+                keySize: 256 / 32,
+                iterations: 1000
+            });
+
+            const encryptedImage = CryptoJS.AES.encrypt(wordArray, aesKey, { iv: salt }).toString();
+
+            // Fetch doctor's public key
+            const res = await fetch(`http://localhost:8000/users/public-key/${doctorUsername}`);
+            if (!res.ok) throw new Error("Unable to fetch doctor's public key");
+            const doctorPublicKey = await res.text();
+
+            // Encrypt AES key with RSA public key
+            const jsEncrypt = new JSEncrypt();
+            jsEncrypt.setPublicKey(doctorPublicKey);
+            const encryptedAESKey = jsEncrypt.encrypt(aesKey.toString());
+
+            if (!encryptedAESKey) {
+                alert("Failed to encrypt AES key.");
+                return;
+            }
+
+            const payload = {
+                encrypted_image: encryptedImage,
+                salt: salt.toString(),
+                original_filename: file.name,
+                encrypted_aes_key: encryptedAESKey,
+                doctor_username: doctorUsername,
+                patient_username: patientUsername
+            };
+
+            const response = await fetch('http://localhost:8000/upload-image/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (response.ok) {
+                alert('Image uploaded and encrypted successfully.');
+            } else {
+                const errorText = await response.text();
+                alert(`Upload failed. Status: ${response.status}, Message: ${errorText}`);
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('An error occurred during upload.');
+        }
+    };
+
+    // Correct placement — triggers the FileReader
+    reader.readAsArrayBuffer(file);
+});
+</script>
+
+

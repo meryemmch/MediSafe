@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Upload Encrypted Report</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+  <script src="https://cdn.rawgit.com/travist/jsencrypt/master/bin/jsencrypt.min.js"></script>
+   <style>
+   body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;   /* vertical centering */
+  align-items: center;       /* horizontal centering */
+  min-height: 100vh;         /* full viewport height */
+  font-family: Arial, sans-serif;
+  background-color: #f0f2f5;
+  margin: 0;                 /* reset default margins */
+  padding: 2em;
+  text-align: center;
+}
+
+input, textarea {
+  width: 300px;            /* bigger width */
+  padding: 1em 1.5em;      /* bigger padding */
+  margin: 1em 0;
+  font-size: 1.2em;
+  border: 2px solid #ccc;
+  border-radius: 15px;     /* rounded corners */
+  box-sizing: border-box;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+input:focus, textarea:focus {
+  border-color: #007bff;
+  outline: none;
+  box-shadow: 0 0 8px 2px rgba(0, 123, 255, 0.5); /* clear blue glow */
+}
+
+    h1 {
+      margin-bottom: 1.5em;
+      color: #333;
+    }
+
+   button {
+  font-size: 1.2em;          /* bigger font */
+  padding: 0.8em 2.5em;     /* bigger padding */
+  margin: 1em;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 15px;       /* more rounded corners */
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+button:hover {
+  background-color: #0056b3;
+}
+
+    button:hover {
+      background-color: #0056b3;
+    }
+
+
+    h1, h2 {
+      text-align: center;
+      color: #333;
+    }
+
+    select {
+  width: 300px;
+  padding: 1em 1.5em;
+  margin: 1em 0;
+  font-size: 1.2em;
+  border: 2px solid #ccc;
+  border-radius: 15px;
+  box-sizing: border-box;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  background-color: white; /* for consistent look */
+  appearance: none; /* optional: remove default OS styling */
+}
+
+select:focus {
+  border-color: #007bff;
+  outline: none;
+  box-shadow: 0 0 8px 2px rgba(0, 123, 255, 0.5);
+}
+
+    label {
+      display: block;
+      margin-top: 1em;
+      font-weight: bold;
+    }
+
+    input[type="text"], input[type="password"], input[type="file"], button {
+      width: 100%;
+      max-width: 400px;
+      padding: 0.6em;
+      margin-top: 0.3em;
+      margin-bottom: 1em;
+      font-size: 1em;
+    }
+
+   button {
+  font-size: 1.2em;          /* bigger font */
+  padding: 0.8em 2.5em;     /* bigger padding */
+  margin: 1em;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 15px;       /* more rounded corners */
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+button:hover {
+  background-color: #0056b3;
+}
+
+    .status {
+      margin: 1em 0;
+      color: green;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Upload Encrypted Report</h1>
+
+<section id="upload-report-section">
+  
+
+  <label for="doctorUsername">Doctor Username:</label>
+  <input type="text" id="doctorUsername" placeholder="Enter your username" />
+
+  <label for="patientUsername">Patient Username:</label>
+  <input type="text" id="patientUsername" placeholder="Enter patient username" />
+
+  <label for="reportFile">Select report file:</label>
+  <input type="file" id="reportFile" accept=".pdf,.txt,.doc,.docx" />
+
+  <label for="reportPassword">Password:</label>
+  <input type="password" id="reportPassword" placeholder="Enter a strong password" />
+
+  <button onclick="encryptAndUploadReport()">Encrypt & Upload Report</button>
+  <p id="uploadStatus" class="status"></p>
+</section>
+
+<script>
+// Encrypt and Upload
+async function encryptAndUploadReport() {
+  const fileInput = document.getElementById("reportFile");
+  const password = document.getElementById("reportPassword").value;
+  const patientUsername = document.getElementById("patientUsername").value;
+  const doctorUsername = document.getElementById("doctorUsername").value;
+  const status = document.getElementById("uploadStatus");
+
+  status.textContent = "Encrypting...";
+
+  if (fileInput.files.length === 0 || !password || !patientUsername || !doctorUsername) {
+    status.textContent = "Please fill in all fields.";
+    return;
+  }
+
+  const file = fileInput.files[0];
+  const reader = new FileReader();
+
+  reader.onload = async function () {
+    try {
+      const wordArray = CryptoJS.lib.WordArray.create(new Uint8Array(reader.result));
+      const salt = CryptoJS.lib.WordArray.random(128 / 8); // 16-byte IV
+
+      const aesKey = CryptoJS.PBKDF2(password, salt, {
+        keySize: 256 / 32,
+        iterations: 100000
+      });
+        console.log("Derived AES Key (hex):", aesKey.toString(CryptoJS.enc.Hex));
+    
+      const iV = CryptoJS.lib.WordArray.random(16);
+
+      const encrypted = CryptoJS.AES.encrypt(wordArray, aesKey, {
+        iv: iV,
+        mode: CryptoJS.mode.CBC,
+        padding: CryptoJS.pad.Pkcs7
+      }).toString(); // Base64 string
+      console.log('data',encrypted)
+
+      const res = await fetch(`http://localhost:8000/users/public-key/${patientUsername}`);
+      if (!res.ok) throw new Error("Failed to fetch patient's public key");
+
+      const patientPublicKey = await res.text();
+      const jsEncrypt = new JSEncrypt();
+      jsEncrypt.setPublicKey(patientPublicKey);
+
+      const encryptedAESKey = jsEncrypt.encrypt(aesKey.toString());
+      if (!encryptedAESKey) {
+        alert("AES key encryption failed.");
+        return;
+      }
+
+      const payload = {
+        iv:iV.toString(CryptoJS.enc.Hex),
+        encrypted_report: encrypted,
+        salt: salt.toString(CryptoJS.enc.Hex),
+        filename: file.name,
+        encrypted_aes_key: encryptedAESKey,
+        doctor_username: doctorUsername,
+        patient_username: patientUsername
+      };
+
+      const response = await fetch("http://localhost:8000/upload_report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      const result = await response.json();
+      status.textContent = response.ok ? result.detail || "Upload successful." : `Upload failed. ${result.detail || ''}`;
+
+    } catch (error) {
+      console.error("Encryption error:", error);
+      status.textContent = "An error occurred during encryption or upload.";
+    }
+  };
+
+  reader.readAsArrayBuffer(file);
+}
+</script>
+
+</body>
+</html>

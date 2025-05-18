@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Doctor Portal</title>
+    <style>
+   body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;   /* vertical centering */
+  align-items: center;       /* horizontal centering */
+  min-height: 100vh;         /* full viewport height */
+  font-family: Arial, sans-serif;
+  background-color: #f0f2f5;
+  margin: 0;                 /* reset default margins */
+  padding: 2em;
+  text-align: center;
+}
+.button-group {
+  display: flex;
+  gap: 2em; /* space between buttons */
+  justify-content: center;
+  flex-wrap: wrap; /* allow wrapping on small screens */
+}
+   button {
+  font-size: 1.2em;          /* bigger font */
+  padding: 0.8em 2.5em;     /* bigger padding */
+  margin: 1em;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 15px;       /* more rounded corners */
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+button:hover {
+  background-color: #0056b3;
+}
+
+ h1, h2 {
+      text-align: center;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <h1>Welcome to the Doctor Portal</h1>
+  <div class="button-group">
+    <button onclick="location.href='/doctor/static/decrypt.html'">See Results</button>
+    <button onclick="location.href='/doctor/static/upload.html'">Upload Report</button>
+  </div>
+</body>

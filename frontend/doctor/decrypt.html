@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Decrypt Image</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+  <script src="https://cdn.rawgit.com/travist/jsencrypt/master/bin/jsencrypt.min.js"></script>
+  <style>
+   body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;   /* vertical centering */
+  align-items: center;       /* horizontal centering */
+  min-height: 100vh;         /* full viewport height */
+  font-family: Arial, sans-serif;
+  background-color: #f0f2f5;
+  margin: 0;                 /* reset default margins */
+  padding: 2em;
+  text-align: center;
+}
+
+input, textarea {
+  width: 300px;            /* bigger width */
+  padding: 1em 1.5em;      /* bigger padding */
+  margin: 1em 0;
+  font-size: 1.2em;
+  border: 2px solid #ccc;
+  border-radius: 15px;     /* rounded corners */
+  box-sizing: border-box;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+input:focus, textarea:focus {
+  border-color: #007bff;
+  outline: none;
+  box-shadow: 0 0 8px 2px rgba(0, 123, 255, 0.5); /* clear blue glow */
+}
+
+    h1 {
+      margin-bottom: 1.5em;
+      color: #333;
+    }
+
+   button {
+  font-size: 1.2em;          /* bigger font */
+  padding: 0.8em 2.5em;     /* bigger padding */
+  margin: 1em;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 15px;       /* more rounded corners */
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+button:hover {
+  background-color: #0056b3;
+}
+
+    button:hover {
+      background-color: #0056b3;
+    }
+
+
+    h1, h2 {
+      text-align: center;
+      color: #333;
+    }
+
+    section {
+      background-color: #fff;
+      padding: 1.5em;
+      margin-bottom: 2em;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    label {
+      display: block;
+      margin-top: 1em;
+      font-weight: bold;
+    }
+     select {
+  width: 300px;
+  padding: 1em 1.5em;
+  margin: 1em 0;
+  font-size: 1.2em;
+  border: 2px solid #ccc;
+  border-radius: 15px;
+  box-sizing: border-box;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  background-color: white; /* for consistent look */
+  appearance: none; /* optional: remove default OS styling */
+}
+
+select:focus {
+  border-color: #007bff;
+  outline: none;
+  box-shadow: 0 0 8px 2px rgba(0, 123, 255, 0.5);
+}
+
+    input[type="text"], input[type="password"], input[type="file"], button {
+      width: 100%;
+      max-width: 400px;
+      padding: 0.6em;
+      margin-top: 0.3em;
+      margin-bottom: 1em;
+      font-size: 1em;
+    }
+
+    .status {
+      margin: 1em 0;
+      color: green;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Decrypt and Download Patient Image</h1>
+<section id="decrypt-image-section">
+  
+
+  <label for="doctorUsername">Doctor Username:</label>
+  <input type="text" id="doctorUsername" placeholder="Enter your username" />
+
+  <label for="privateKeyFile">Upload Your Private Key (.key):</label>
+  <input type="file" id="privateKeyFile" accept=".key" />
+
+  <label for="imageSelect">Select a Patient:</label>
+  <select id="imageSelect"></select>
+
+  <button id="decryptBtn">Decrypt & Download</button>
+</section>
+
+<script>
+let imagesMetadata = [];
+let privateKeyPEM = null;
+
+document.getElementById("privateKeyFile").addEventListener("change", function(event) {
+  const file = event.target.files[0];
+  const reader = new FileReader();
+
+  reader.onload = function(e) {
+    try {
+      const raw = e.target.result;
+      let keyData = JSON.parse(raw);
+
+      if (!keyData.encryptedPrivate || !keyData.salt) {
+        alert("Missing encryptedPrivate or salt.");
+        return;
+      }
+
+      const password = prompt("Enter your password to decrypt the private key:");
+      if (!password) return;
+
+      const saltParsed = CryptoJS.enc.Hex.parse(keyData.salt);
+      const aesKey = CryptoJS.PBKDF2(password, saltParsed, { keySize: 256 / 32 });
+      const decrypted = CryptoJS.AES.decrypt(keyData.encryptedPrivate, aesKey.toString());
+      const decryptedUtf8 = decrypted.toString(CryptoJS.enc.Utf8);
+
+      if (!decryptedUtf8.includes("PRIVATE KEY")) {
+        alert("Wrong password or corrupted file.");
+        return;
+      }
+
+      privateKeyPEM = decryptedUtf8;
+    } catch (err) {
+      alert("Failed to process key.");
+      console.error(err);
+    }
+  };
+
+  reader.readAsText(file);
+});
+
+async function fetchEncryptedImages() {
+  const doctorUsername = document.getElementById("doctorUsername").value.trim();
+  const select = document.getElementById("imageSelect");
+  select.innerHTML = "";
+
+  if (!doctorUsername) return;
+
+  try {
+    const response = await fetch(`/get-encrypted-images/${doctorUsername}`);
+    const images = await response.json();
+    imagesMetadata = images;
+
+    images.forEach(img => {
+      const option = document.createElement("option");
+      option.value = img.image_id;
+      option.text = img.patient_username;
+      select.appendChild(option);
+    });
+  } catch (err) {
+    console.error("Error fetching images:", err);
+  }
+}
+
+document.getElementById("doctorUsername").addEventListener("change", fetchEncryptedImages);
+fetchEncryptedImages();
+
+document.getElementById("decryptBtn").addEventListener("click", async () => {
+  if (!privateKeyPEM) {
+    alert("Please upload your private key.");
+    return;
+  }
+
+  const imageId = document.getElementById("imageSelect").value;
+  if (!imageId) {
+    alert("Please select an image.");
+    return;
+  }
+
+  try {
+    const imgData = imagesMetadata.find(img => img.image_id == imageId);
+    const decryptor = new JSEncrypt();
+    decryptor.setPrivateKey(privateKeyPEM);
+
+    const decryptedAESKeyHex = decryptor.decrypt(imgData.encrypted_aes_key);
+    const aesKeyWA = CryptoJS.enc.Hex.parse(decryptedAESKeyHex);
+    const saltWA = CryptoJS.enc.Hex.parse(imgData.salt);
+
+    const cipherParams = CryptoJS.lib.CipherParams.create({
+      ciphertext: CryptoJS.enc.Base64.parse(imgData.base64_file)
+    });
+
+    const decrypted = CryptoJS.AES.decrypt(cipherParams, aesKeyWA, {
+      iv: saltWA,
+      mode: CryptoJS.mode.CBC,
+      padding: CryptoJS.pad.Pkcs7
+    });
+
+    const uint8Array = wordArrayToUint8Array(decrypted);
+    triggerDownload(new Blob([uint8Array], { type: "image/png" }), imgData.original_filename || "image.png");
+
+  } catch (err) {
+    console.error(err);
+    alert("Image Decryption failed.");
+  }
+});
+
+function wordArrayToUint8Array(wordArray) {
+  const words = wordArray.words;
+  const sigBytes = wordArray.sigBytes;
+  const u8 = new Uint8Array(sigBytes);
+  let idx = 0;
+  for (let i = 0; i < words.length; i++) {
+    let word = words[i];
+    for (let b = 3; b >= 0; b--) {
+      if (idx < sigBytes) {
+        u8[idx++] = (word >> (b * 8)) & 0xff;
+      }
+    }
+  }
+  return u8;
+}
+
+function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+</script>
+
+</body>
+</html>

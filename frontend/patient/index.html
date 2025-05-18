@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Decrypt Image</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+  <script src="https://cdn.rawgit.com/travist/jsencrypt/master/bin/jsencrypt.min.js"></script>
+  <style>
+   body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;   /* vertical centering */
+  align-items: center;       /* horizontal centering */
+  min-height: 100vh;         /* full viewport height */
+  font-family: Arial, sans-serif;
+  background-color: #f0f2f5;
+  margin: 0;                 /* reset default margins */
+  padding: 2em;
+  text-align: center;
+}
+
+input, textarea {
+  width: 300px;            /* bigger width */
+  padding: 1em 1.5em;      /* bigger padding */
+  margin: 1em 0;
+  font-size: 1.2em;
+  border: 2px solid #ccc;
+  border-radius: 15px;     /* rounded corners */
+  box-sizing: border-box;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+input:focus, textarea:focus {
+  border-color: #007bff;
+  outline: none;
+  box-shadow: 0 0 8px 2px rgba(0, 123, 255, 0.5); /* clear blue glow */
+}
+
+    h1 {
+      margin-bottom: 1.5em;
+      color: #333;
+    }
+
+   button {
+  font-size: 1.2em;          /* bigger font */
+  padding: 0.8em 2.5em;     /* bigger padding */
+  margin: 1em;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 15px;       /* more rounded corners */
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+button:hover {
+  background-color: #0056b3;
+}
+
+    button:hover {
+      background-color: #0056b3;
+    }
+
+
+    h1, h2 {
+      text-align: center;
+      color: #333;
+    }
+
+    section {
+      background-color: #fff;
+      padding: 1.5em;
+      margin-bottom: 2em;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    label {
+      display: block;
+      margin-top: 1em;
+      font-weight: bold;
+    }
+
+    input[type="text"], input[type="password"], input[type="file"], button {
+      width: 100%;
+      max-width: 400px;
+      padding: 0.6em;
+      margin-top: 0.3em;
+      margin-bottom: 1em;
+      font-size: 1em;
+    }
+
+   button {
+  font-size: 1.2em;          /* bigger font */
+  padding: 0.8em 2.5em;     /* bigger padding */
+  margin: 1em;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 15px;       /* more rounded corners */
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+button:hover {
+  background-color: #0056b3;
+}
+
+    .status {
+      margin: 1em 0;
+      color: green;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<h1>Decrypt and Download Your Reports</h1>
+
+<section id="decrypt-report-section">
+  <label for="patientUsername">Your Username:</label>
+  <input type="text" id="patientUsername" placeholder="Enter your username" />
+
+  <label for="privateKeyFile">Upload Your Private Key (.key):</label>
+  <input type="file" id="privateKeyFile" accept=".key" />
+
+  <label for="reportSelect">Select a Report:</label>
+  <select id="reportSelect"></select>
+
+  <button id="decryptBtn">Decrypt & Download</button>
+</section>
+
+<script>
+let reportsMetadata = [];
+let privateKeyPEM = null;
+
+// Read and decrypt private key
+document.getElementById("privateKeyFile").addEventListener("change", function (event) {
+  console.log("Private key file selected");
+  const file = event.target.files[0];
+  const reader = new FileReader();
+
+  reader.onload = function (e) {
+    console.log("Private key file loaded");
+    try {
+      const raw = e.target.result;
+      console.log("Raw file content:", raw.slice(0, 100)); // Log first 100 chars for sanity check
+      let keyData = JSON.parse(raw);
+      console.log("Parsed JSON from key file:", keyData);
+
+      if (!keyData.encryptedPrivate || !keyData.salt) {
+        console.error("Missing encryptedPrivate or salt in key file");
+        alert("Missing encryptedPrivate or salt.");
+        return;
+      }
+
+      const password = prompt("Enter your password to decrypt the private key:");
+      console.log("Password entered:", password ? "YES" : "NO");
+      if (!password) {
+        console.log("Password not provided, aborting decryption");
+        return;
+      }
+
+      const saltParsed = CryptoJS.enc.Hex.parse(keyData.salt);
+      console.log("Salt parsed:", saltParsed.toString());
+      const aesKey = CryptoJS.PBKDF2(password, saltParsed, { keySize: 256 / 32 });
+      console.log("AES key derived:", aesKey.toString());
+      const decrypted = CryptoJS.AES.decrypt(keyData.encryptedPrivate, aesKey.toString());
+      const decryptedUtf8 = decrypted.toString(CryptoJS.enc.Utf8);
+      console.log("Decrypted private key PEM (start):", decryptedUtf8.slice(0, 50));
+
+      if (!decryptedUtf8.includes("PRIVATE KEY")) {
+        console.error("Decrypted content does not contain 'PRIVATE KEY'");
+        alert("Wrong password or corrupted key.");
+        return;
+      }
+
+      privateKeyPEM = decryptedUtf8;
+      console.log("Private key decrypted and stored");
+
+    } catch (err) {
+      console.error("Error processing private key file:", err);
+      alert("Failed to process private key file.");
+    }
+  };
+
+  reader.readAsText(file);
+});
+
+// Fetch reports for patient
+  async function fetchPatientReports() {
+    const patientUsername = document.getElementById("patientUsername").value.trim();
+    const select = document.getElementById("reportSelect");
+    select.innerHTML = "";
+
+    if (!patientUsername) return;
+
+    try {
+      const response = await fetch(`/get-patient-reports/${patientUsername}`);
+      const reports = await response.json();
+      reportsMetadata = reports;
+
+      reports.forEach(report => {
+        const option = document.createElement("option");
+        option.value = report.report_id;
+        option.text = `From Dr. ${report.doctor_username} - ${report.original_filename}`;
+        select.appendChild(option);
+      });
+    } catch (err) {
+      console.error("Error fetching reports:", err);
+      alert("Failed to fetch your reports.");
+    }
+  }
+
+  document.getElementById("patientUsername").addEventListener("change", fetchPatientReports);
+
+
+function wordArrayToUint8Array(wordArray) {
+  const words = wordArray.words;
+  const sigBytes = wordArray.sigBytes;
+  const u8 = new Uint8Array(sigBytes);
+  let index = 0;
+
+  for (let i = 0; i < words.length; i++) {
+    // Each word is 4 bytes
+    const word = words[i];
+    for (let b = 3; b >= 0; b--) {
+      if (index < sigBytes) {
+        u8[index++] = (word >> (b * 8)) & 0xff;
+      }
+    }
+  }
+  return u8;
+}
+
+document.getElementById("decryptBtn").addEventListener("click", async () => {
+  console.log("Decrypt button clicked");
+
+  if (!privateKeyPEM) {
+    alert("Please upload and decrypt your private key first.");
+    return;
+  }
+
+  const reportId = document.getElementById("reportSelect").value;
+  if (!reportId) {
+    alert("Please select a report.");
+    return;
+  }
+
+  try {
+    const selectedReport = reportsMetadata.find(r => r.report_id == reportId);
+    if (!selectedReport) {
+      alert("Selected report metadata not found.");
+      return;
+    }
+    // Decrypt AES key using RSA private key
+    const decryptor = new JSEncrypt();
+    decryptor.setPrivateKey(privateKeyPEM);
+
+    const decryptedAESKeyHex = decryptor.decrypt(selectedReport.encrypted_aes_key);
+    if (!decryptedAESKeyHex) {
+      alert("Failed to decrypt AES key.");
+      return;
+    }
+    console.log("Decrypted AES Key (hex):", decryptedAESKeyHex);
+
+    // Parse AES key and IV
+    const aesKeyWA = CryptoJS.enc.Hex.parse(decryptedAESKeyHex);
+    console.log("AES key length (bytes):", aesKeyWA.sigBytes);
+    console.log("Encrypted base64 file content:", selectedReport.base64_file);
+
+   console.log('iv',selectedReport.iv=='')
+    // Base64 decode encrypted file content
+    const cipherParams = CryptoJS.lib.CipherParams.create({
+      ciphertext: CryptoJS.enc.Base64.parse(selectedReport.base64_file)
+    });
+
+    console.log("Ciphertext length (bytes):", cipherParams.ciphertext.sigBytes);
+
+    console.log('selectedReport:', selectedReport);
+    console.log('iv:', selectedReport?.iv);
+
+    const ivWA = CryptoJS.enc.Hex.parse(selectedReport.iv);
+    
+    
+    const decryptedWA = CryptoJS.AES.decrypt(cipherParams, aesKeyWA, {
+      iv: ivWA,
+      mode: CryptoJS.mode.CBC,
+      padding: CryptoJS.pad.Pkcs7
+    });
+
+    if (decryptedWA.sigBytes <= 0) {
+      alert("Decryption failed or resulted in empty data.");
+      return;
+    }
+
+    const decryptedBytes = wordArrayToUint8Array(decryptedWA);
+    
+
+    // Convert decrypted WordArray to Uint8Array (raw bytes)
+    
+    // Determine filename and MIME type
+    const filename = selectedReport.original_filename || "decrypted_report.docx";
+    const mimeType = filename.endsWith(".docx")
+      ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      : "application/octet-stream";
+
+    // Create Blob and trigger file download
+    const blob = new Blob([decryptedBytes], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a); // Required for Firefox
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+
+  } catch (error) {
+    console.error("Decryption error:", error);
+    alert("An error occurred during decryption. See console for details.");
+  }
+});
+</script>
