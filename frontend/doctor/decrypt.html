@@ -115,6 +115,7 @@ select:focus {
       font-weight: bold;
     }
   </style>
+  <link rel="icon" type="image/png" href="/static/logo33.png">
 </head>
 <body>
 
@@ -127,6 +128,10 @@ select:focus {
 
   <label for="privateKeyFile">Upload Your Private Key (.key):</label>
   <input type="file" id="privateKeyFile" accept=".key" />
+
+  <label for="keyPassword">Private Key Password:</label>
+  <input type="password" id="keyPassword" placeholder="Enter your key password" />
+
 
   <label for="imageSelect">Select a Patient:</label>
   <select id="imageSelect"></select>
@@ -152,8 +157,12 @@ document.getElementById("privateKeyFile").addEventListener("change", function(ev
         return;
       }
 
-      const password = prompt("Enter your password to decrypt the private key:");
-      if (!password) return;
+      const password = document.getElementById("keyPassword").value;
+        if (!password) {
+        alert("Please enter your password.");
+         return;
+        }
+
 
       const saltParsed = CryptoJS.enc.Hex.parse(keyData.salt);
       const aesKey = CryptoJS.PBKDF2(password, saltParsed, { keySize: 256 / 32 });

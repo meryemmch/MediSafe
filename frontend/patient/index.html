@@ -113,6 +113,7 @@ button:hover {
       font-weight: bold;
     }
   </style>
+  <link rel="icon" type="image/png" href="/static/logo33.png">
 </head>
 <h1>Decrypt and Download Your Reports</h1>
 
@@ -122,6 +123,9 @@ button:hover {
 
   <label for="privateKeyFile">Upload Your Private Key (.key):</label>
   <input type="file" id="privateKeyFile" accept=".key" />
+   
+  <label for="keyPassword">Private Key Password:</label>
+  <input type="password" id="keyPassword" placeholder="Enter your key password" />
 
   <label for="reportSelect">Select a Report:</label>
   <select id="reportSelect"></select>
@@ -153,7 +157,12 @@ document.getElementById("privateKeyFile").addEventListener("change", function (e
         return;
       }
 
-      const password = prompt("Enter your password to decrypt the private key:");
+      const password = document.getElementById("keyPassword").value;
+        if (!password) {
+        alert("Please enter your password.");
+         return;
+        }
+
       console.log("Password entered:", password ? "YES" : "NO");
       if (!password) {
         console.log("Password not provided, aborting decryption");
@@ -321,3 +330,5 @@ document.getElementById("decryptBtn").addEventListener("click", async () => {
   }
 });
 </script>
+</body>
+</html>
